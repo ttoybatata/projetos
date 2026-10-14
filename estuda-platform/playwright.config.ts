@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
-  // Serialize CI browser tests to reduce intermittent failures and simplify diagnosis.
+  // SQLite is a single-writer database; serialize CI browser tests to avoid lock contention.
   workers: process.env.CI ? 1 : undefined,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
