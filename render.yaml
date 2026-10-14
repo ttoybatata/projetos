@@ -1,8 +1,8 @@
 databases:
   - name: estuda-postgres
     plan: free
-    databaseName: estuda
-    user: estuda
+    databaseName: estuda_postgres
+    user: estuda_postgres_user
 
 services:
   - type: web
