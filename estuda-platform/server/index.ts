@@ -102,9 +102,9 @@ app.post("/api/auth/register", async (req, res, next) => {
       recoveryCodeHash: createHash("sha256").update(recoveryCode).digest("hex"),
       schoolYear: parsed.data.schoolYear, readingFluency: parsed.data.readingFluency,
       learningGoals: JSON.stringify(parsed.data.learningGoals)
-    }, select: { id: true, displayName: true, schoolYear: true } });
+    }, select: { id: true, displayName: true, schoolYear: true, readingFluency: true, learningGoals: true } });
     issueSession(res, user.id);
-    return res.status(201).json({ user, recoveryCode, notice: "Guarde seu código de recuperação em local seguro. Ele não será exibido novamente." });
+    return res.status(201).json({ user: { ...user, learningGoals: JSON.parse(user.learningGoals) }, recoveryCode, notice: "Guarde seu código de recuperação em local seguro. Ele não será exibido novamente." });
   } catch (error) { return next(error); }
 });
 
@@ -143,7 +143,7 @@ app.post("/api/auth/login", async (req, res, next) => {
     const user = await prisma.user.findUnique({ where: { displayName: parsed.data.displayName } });
     if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) return res.status(401).json({ error: "Nome ou senha incorretos." });
     issueSession(res, user.id);
-    return res.json({ user: { id: user.id, displayName: user.displayName, schoolYear: user.schoolYear } });
+    return res.json({ user: { id: user.id, displayName: user.displayName, schoolYear: user.schoolYear, readingFluency: user.readingFluency, learningGoals: JSON.parse(user.learningGoals) } });
   } catch (error) { return next(error); }
 });
 
