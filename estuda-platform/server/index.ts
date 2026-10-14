@@ -187,6 +187,17 @@ app.patch("/api/me", requireSession, async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+app.get("/api/diagnostic", requireSession, async (_req, res, next) => {
+  try {
+    const diagnostic = await prisma.diagnostic.findUnique({
+      where: { userId: res.locals.userId },
+      select: { answers: true, completedAt: true }
+    });
+    if (!diagnostic) return res.json({ answers: {}, completedAt: null });
+    return res.json({ answers: JSON.parse(diagnostic.answers), completedAt: diagnostic.completedAt });
+  } catch (error) { return next(error); }
+});
+
 app.put("/api/diagnostic", requireSession, async (req, res, next) => {
   try {
     const parsed = diagnosticSchema.safeParse(req.body);
