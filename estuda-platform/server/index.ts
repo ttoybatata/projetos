@@ -69,7 +69,9 @@ app.post("/api/activities/start", requireSession, async (req, res, next) => {
 
 app.post("/api/activities/:id/complete", requireSession, async (req, res, next) => {
   try {
-    const attempt = await prisma.activityAttempt.findFirst({ where: { id: req.params.id, userId: res.locals.userId } });
+    const parsedAttemptId = z.string().min(1).max(100).safeParse(req.params.id);
+    if (!parsedAttemptId.success) return res.status(400).json({ error: "Identificador de sessão inválido." });
+    const attempt = await prisma.activityAttempt.findFirst({ where: { id: parsedAttemptId.data, userId: res.locals.userId } });
     if (!attempt) return res.status(404).json({ error: "Sessão de atividade não encontrada." });
     if (attempt.status === "COMPLETED") return res.status(409).json({ error: "Esta atividade já foi concluída." });
     const completed = await prisma.activityAttempt.update({ where: { id: attempt.id }, data: { status: "COMPLETED", completedAt: new Date() }, select: { id: true, activityKey: true, status: true, startedAt: true, completedAt: true } });
