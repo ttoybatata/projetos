@@ -12,7 +12,7 @@ Fundação inicial em desenvolvimento; ainda não é a plataforma completa de pr
 ## Limitações conhecidas
 - A recuperação usa o nome de usuário e o código de uso único; após recuperar, a senha é trocada e um novo código é emitido. O código deve ser guardado pelo aluno e não é enviado por e-mail.
 - O diagnóstico inicial usa perguntas por série, fluência de leitura e objetivos, salva respostas e mostra orientações baseadas em regras explícitas. Ainda não atribui notas nem substitui avaliação pedagógica.
-- Exercícios avaliativos interativos, simulados, redação e tutor IA generativo ainda não estão implementados. As trilhas atuais são um ponto de partida editável; as sugestões do diagnóstico são regras transparentes, não respostas geradas por IA.
+- A interface e o endpoint do tutor IA estão implementados para provedores compatíveis com a API de chat, mas o tutor só responde quando `AI_API_URL`, `AI_API_KEY` e `AI_MODEL` são configurados como segredos/variáveis no ambiente do servidor. Sem isso, a aplicação informa que o serviço não está configurado; ela não simula respostas de IA. Exercícios avaliativos interativos, simulados e redação continuam pendentes. As trilhas atuais são um ponto de partida editável; as sugestões do diagnóstico são regras transparentes, não respostas geradas por IA.
 - SQLite é usado para desenvolvimento local. Antes de produção, configurar PostgreSQL e validar migrações, backups, segurança e privacidade.
 - Os testes E2E automatizados cobrem cadastro/login, trilhas, persistência, recuperação de conta e edição de perfil; consulte a execução do GitHub Actions para o resultado do commit revisado. Não declarar aprovação sem conferir os logs.
 
