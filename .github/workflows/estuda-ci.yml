@@ -45,7 +45,7 @@ jobs:
         run: |
           npm audit --json > /tmp/estuda-npm-audit.json || true
           node -e 'const audit = require("/tmp/estuda-npm-audit.json"); for (const [name, item] of Object.entries(audit.vulnerabilities ?? {})) console.log(JSON.stringify({ name, severity: item.severity, isDirect: item.isDirect, range: item.range, fixAvailable: item.fixAvailable, via: item.via.map(v => typeof v === "string" ? v : { name: v.name, title: v.title, url: v.url, range: v.range }) }));'
-      - name: Fail on high or critical dependency vulnerabilities
+      - name: Enforce audit threshold (high/critical)
         run: npm audit --audit-level=high
       - name: Verify PostgreSQL is ready
         run: pg_isready -h localhost -p 5432 -U estuda -d estuda_ci
