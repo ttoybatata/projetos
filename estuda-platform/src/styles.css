@@ -9,3 +9,9 @@
 .dashboard-recovery code{overflow-wrap:anywhere}
 .profile-form{margin-top:1.25rem;max-width:640px}
 @media(max-width:760px){.dashboard-recovery{padding:1rem}.profile-form{max-width:100%}}
+
+.diagnostic-recommendations{margin-top:1.25rem;padding:1.1rem 1.25rem;border:1px solid #dce7f5;border-radius:12px;background:#f8faff}
+.diagnostic-recommendations h3{font-family:Manrope,sans-serif;margin:.1rem 0 .75rem;color:#243d68}
+.diagnostic-recommendations ul{padding-left:1.25rem;margin:.5rem 0;display:grid;gap:.65rem;color:#394760;line-height:1.6}
+.diagnostic-recommendations .muted{font-size:.8rem;margin-bottom:0}
+.diagnostic-card{gap:1.2rem}
