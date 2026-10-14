@@ -125,15 +125,17 @@ test("recupera conta com código de uso único e permite editar o perfil", async
     error: "Não foi possível recuperar a conta. Confira os dados e tente novamente."
   });
 
-  await page.getByLabel("Nome de usuário").fill(updatedUsername);
-  await page.getByLabel("Código de recuperação").fill(rotatedCode!);
-  await page.getByLabel("Nova senha", { exact: true }).fill(secondPassword);
-  await page.getByLabel("Confirme a nova senha").fill(secondPassword);
-  await page.getByRole("button", { name: "Redefinir senha" }).click();
-  await expect(page.getByRole("heading", { name: "Seu próximo passo começa aqui." })).toBeVisible();
+  const secondRecovery = await page.request.post("http://127.0.0.1:3000/api/auth/recover", {
+    data: { displayName: updatedUsername, recoveryCode: rotatedCode, newPassword: secondPassword }
+  });
+  expect(secondRecovery.status()).toBe(200);
+  const secondRecoveryBody = await secondRecovery.json() as { recoveryCode: string };
+  expect(secondRecoveryBody.recoveryCode).not.toBe(rotatedCode);
 
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Seu próximo passo começa aqui." })).toBeVisible();
   await page.getByRole("button", { name: "Sair" }).click();
-  await page.getByRole("button", { name: "Voltar para entrar" }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
   await page.getByLabel("Nome de usuário").fill(updatedUsername);
   await page.getByLabel("Senha", { exact: true }).fill(secondPassword);
   await page.getByRole("button", { name: "Entrar no Estuda" }).click();
