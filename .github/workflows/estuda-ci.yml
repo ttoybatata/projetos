@@ -32,6 +32,25 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npx playwright install --with-deps chromium
+      - name: Explore rendered page with Microsoft's Playwright CLI
+        run: |
+          npm run dev:api > /tmp/estuda-api.log 2>&1 &
+          API_PID=$!
+          npm run dev:web > /tmp/estuda-web.log 2>&1 &
+          WEB_PID=$!
+          trap 'kill $API_PID $WEB_PID 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null && curl -fsS http://127.0.0.1:5173 >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/health
+          npm run browser:help
+          npx playwright-cli open http://127.0.0.1:5173
+          npx playwright-cli snapshot | tee /tmp/estuda-cli-snapshot.txt
+          grep -q "Vamos começar?" /tmp/estuda-cli-snapshot.txt
+          npx playwright-cli close
       - run: npm run test:e2e
         env:
           CI: true
