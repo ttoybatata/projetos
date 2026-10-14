@@ -7,14 +7,16 @@ import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { curriculum, schoolYears } from "../shared/curriculum.js";
+import { quizzes } from "../shared/activities.js";
 
 const app = express();
 const prisma = new PrismaClient();
 const port = Number(process.env.PORT ?? 3000);
-const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+const webOrigin = process.env.WEB_ORIGIN || (process.env.NODE_ENV === "production" ? false : "http://localhost:5173");
 if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
   throw new Error("JWT_SECRET precisa ter pelo menos 32 caracteres em produção.");
 }
@@ -24,6 +26,7 @@ app.use(cors({ origin: webOrigin, credentials: true }));
 app.use(express.json({ limit: "32kb" }));
 app.use(cookieParser());
 app.use("/api/auth", rateLimit({ windowMs: 900000, limit: 30, standardHeaders: true, legacyHeaders: false }));
+app.use("/api/tutor", rateLimit({ windowMs: 60000, limit: 12, standardHeaders: true, legacyHeaders: false }));
 
 function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
   const token = req.cookies?.estuda_session;
@@ -65,6 +68,72 @@ app.get("/api/curriculum", (req, res) => {
   return res.json({ grade: parsedGrade.data, subjects: curriculum[parsedGrade.data] });
 });
 
+app.get("/api/activities/:activityKey/quiz", requireSession, async (req, res, next) => {
+  try {
+    const parsedKey = z.string().min(1).max(100).safeParse(req.params.activityKey);
+    if (!parsedKey.success) return res.status(400).json({ error: "Atividade inválida." });
+    const user = await prisma.user.findUnique({ where: { id: res.locals.userId }, select: { schoolYear: true } });
+    if (!user?.schoolYear || !schoolYears.includes(user.schoolYear as typeof schoolYears[number])) {
+      return res.status(400).json({ error: "Defina sua série antes de abrir uma atividade." });
+    }
+    const topics = curriculum[user.schoolYear as typeof schoolYears[number]].flatMap(subject => subject.topics);
+    if (!topics.some(topic => topic.key === parsedKey.data)) return res.status(404).json({ error: "Atividade não encontrada para esta série." });
+    const quiz = quizzes[parsedKey.data];
+    if (!quiz) return res.status(404).json({ error: "Esta atividade ainda não tem questões com correção automática. Você pode estudar o tópico e registrar a conclusão guiada." });
+    return res.json({
+      activityKey: quiz.activityKey,
+      questions: quiz.questions.map(({ id, prompt, choices }) => ({ id, prompt, choices }))
+    });
+  } catch (error) { return next(error); }
+});
+
+app.post("/api/activities/:id/submit", requireSession, async (req, res, next) => {
+  try {
+    const parsedId = z.string().min(1).max(100).safeParse(req.params.id);
+    const parsedBody = z.object({
+      answers: z.record(z.string(), z.number().int().min(0).max(20)).refine(value => Object.keys(value).length <= 20)
+    }).safeParse(req.body);
+    if (!parsedId.success || !parsedBody.success) return res.status(400).json({ error: "Respostas inválidas. Revise as opções e tente novamente." });
+    const attempt = await prisma.activityAttempt.findFirst({
+      where: { id: parsedId.data, userId: res.locals.userId }
+    });
+    if (!attempt) return res.status(404).json({ error: "Sessão de atividade não encontrada." });
+    if (attempt.status === "COMPLETED") return res.status(409).json({ error: "Esta tentativa já foi enviada." });
+    const user = await prisma.user.findUnique({ where: { id: res.locals.userId }, select: { schoolYear: true } });
+    if (!user?.schoolYear || !schoolYears.includes(user.schoolYear as typeof schoolYears[number]) ||
+        !curriculum[user.schoolYear as typeof schoolYears[number]].some(subject => subject.topics.some(topic => topic.key === attempt.activityKey))) {
+      return res.status(403).json({ error: "Esta atividade não pertence à série atual da sua conta." });
+    }
+    const quiz = quizzes[attempt.activityKey];
+    if (!quiz) return res.status(404).json({ error: "Esta atividade não possui correção automática." });
+    const expectedIds = quiz.questions.map(question => question.id);
+    if (Object.keys(parsedBody.data.answers).length !== expectedIds.length ||
+        expectedIds.some(id => !Object.prototype.hasOwnProperty.call(parsedBody.data.answers, id)) ||
+        quiz.questions.some(question => parsedBody.data.answers[question.id] >= question.choices.length)) {
+      return res.status(400).json({ error: "Responda a todas as questões usando uma das opções disponíveis." });
+    }
+    const details = quiz.questions.map(question => ({
+      id: question.id,
+      correct: parsedBody.data.answers[question.id] === question.correctIndex,
+      correctIndex: question.correctIndex,
+      explanation: question.explanation
+    }));
+    const correctCount = details.filter(item => item.correct).length;
+    const score = Math.round((correctCount / quiz.questions.length) * 100);
+    const completed = await prisma.activityAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        status: "COMPLETED",
+        score,
+        answers: JSON.stringify(parsedBody.data.answers),
+        completedAt: new Date()
+      },
+      select: { id: true, activityKey: true, status: true, score: true, startedAt: true, completedAt: true }
+    });
+    return res.json({ attempt: completed, result: { correctCount, total: quiz.questions.length, score, details } });
+  } catch (error) { return next(error); }
+});
+
 app.post("/api/activities/start", requireSession, async (req, res, next) => {
   try {
     const parsed = z.object({ activityKey: z.string().min(1).max(100) }).safeParse(req.body);
@@ -88,6 +157,93 @@ app.post("/api/activities/:id/complete", requireSession, async (req, res, next) 
     const completed = await prisma.activityAttempt.update({ where: { id: attempt.id }, data: { status: "COMPLETED", completedAt: new Date() }, select: { id: true, activityKey: true, status: true, startedAt: true, completedAt: true } });
     return res.json({ attempt: completed });
   } catch (error) { return next(error); }
+});
+
+app.post("/api/tutor/chat", requireSession, async (req, res, next) => {
+  const parsed = z.object({
+    message: z.string().trim().min(1).max(3000),
+    history: z.array(z.object({
+      role: z.enum(["user", "assistant"]),
+      content: z.string().trim().min(1).max(3000)
+    })).max(10).default([])
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Envie uma mensagem de até 3.000 caracteres e um histórico curto." });
+
+  const apiUrl = process.env.AI_API_URL;
+  const apiKey = process.env.AI_API_KEY;
+  const model = process.env.AI_MODEL;
+  if (!apiUrl || !apiKey || !model) {
+    return res.status(503).json({ error: "O tutor IA ainda não está configurado neste ambiente. O administrador precisa configurar AI_API_URL, AI_API_KEY e AI_MODEL." });
+  }
+
+  let target: URL;
+  try {
+    target = new URL(apiUrl);
+  } catch {
+    return res.status(503).json({ error: "A configuração do provedor do tutor IA é inválida." });
+  }
+  if (target.protocol !== "https:" && !["localhost", "127.0.0.1", "::1"].includes(target.hostname)) {
+    return res.status(503).json({ error: "O provedor do tutor IA precisa usar HTTPS." });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: res.locals.userId },
+      select: { schoolYear: true, readingFluency: true, learningGoals: true }
+    });
+    if (!user) return res.status(401).json({ error: "Faça login novamente para usar o tutor." });
+    const gradeLabels: Record<string, string> = {
+      "6EF": "6º ano do Ensino Fundamental", "7EF": "7º ano do Ensino Fundamental",
+      "8EF": "8º ano do Ensino Fundamental", "9EF": "9º ano do Ensino Fundamental",
+      "1EM": "1º ano do Ensino Médio", "2EM": "2º ano do Ensino Médio", "3EM": "3º ano do Ensino Médio"
+    };
+    const goalLabels: Record<string, string> = {
+      melhorar_estudos: "melhorar a qualidade de estudo", aprender: "aprender coisas novas",
+      recuperar_conteudo: "recuperar conteúdo perdido", provas_enem: "preparar-se para provas e ENEM"
+    };
+    const selectedGoals = (JSON.parse(user.learningGoals) as string[]).map(goal => goalLabels[goal] ?? goal);
+    const systemPrompt = [
+      "Você é o tutor pedagógico do Estuda, uma plataforma brasileira para alunos do 6º ano do Ensino Fundamental ao 3º ano do Ensino Médio.",
+      "Responda em português brasileiro, com linguagem acolhedora, clara e adequada à idade.",
+      "Priorize ensinar o raciocínio: comece com uma pista ou pergunta orientadora quando fizer sentido, divida explicações em etapas e verifique se o aluno entendeu.",
+      "Não entregue apenas a resposta final quando o aluno estiver aprendendo; explique conceitos, dê exemplos e convide o aluno a tentar o próximo passo.",
+      "Se a pergunta for sobre uma tarefa escolar, ajude a aprender sem incentivar cola ou apresentar conteúdo não verificado como certeza.",
+      "Não invente notas, histórico de estudo, dados pessoais ou fatos sobre o aluno. Se faltar contexto, pergunte.",
+      "Série do aluno: " + (gradeLabels[user.schoolYear ?? ""] ?? "não informada") + ".",
+      "Fluência de leitura informada pelo aluno: " + (user.readingFluency ?? "não informada") + ".",
+      "Objetivos escolhidos: " + (selectedGoals.length ? selectedGoals.join(", ") : "não informados") + "."
+    ].join("\n");
+
+    const providerResponse = await fetch(target, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiKey },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...parsed.data.history.map(item => ({ role: item.role, content: item.content })),
+          { role: "user", content: parsed.data.message }
+        ],
+        temperature: 0.4,
+        max_tokens: 800
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+    if (!providerResponse.ok) {
+      return res.status(503).json({ error: "O tutor IA está temporariamente indisponível. Tente novamente mais tarde." });
+    }
+    const providerData = await providerResponse.json() as { choices?: Array<{ message?: { content?: unknown } }> };
+    const reply = providerData.choices?.[0]?.message?.content;
+    if (typeof reply !== "string" || !reply.trim()) {
+      return res.status(502).json({ error: "O provedor do tutor IA retornou uma resposta inválida." });
+    }
+    return res.json({ reply: reply.trim().slice(0, 8000) });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return res.status(503).json({ error: "O tutor IA demorou demais para responder. Tente novamente." });
+    }
+    return res.status(503).json({ error: "Não foi possível conectar ao tutor IA. Tente novamente mais tarde." });
+  }
 });
 
 app.post("/api/auth/register", async (req, res, next) => {
@@ -187,6 +343,17 @@ app.patch("/api/me", requireSession, async (req, res, next) => {
   } catch (error) { return next(error); }
 });
 
+app.get("/api/diagnostic", requireSession, async (_req, res, next) => {
+  try {
+    const diagnostic = await prisma.diagnostic.findUnique({
+      where: { userId: res.locals.userId },
+      select: { answers: true, completedAt: true }
+    });
+    if (!diagnostic) return res.json({ answers: {}, completedAt: null });
+    return res.json({ answers: JSON.parse(diagnostic.answers), completedAt: diagnostic.completedAt });
+  } catch (error) { return next(error); }
+});
+
 app.put("/api/diagnostic", requireSession, async (req, res, next) => {
   try {
     const parsed = diagnosticSchema.safeParse(req.body);
@@ -213,6 +380,17 @@ app.get("/api/dashboard", requireSession, async (_req, res, next) => {
     return res.json({ activities, stats: { completedCount, totalStudyMinutes: Math.floor(durationMs / 60000) }, diagnosticCompletedAt: diagnostic?.completedAt ?? null, hasActivity: activities.length > 0 });
   } catch (error) { return next(error); }
 });
+
+if (process.env.NODE_ENV === "production") {
+  const clientDist = path.resolve(process.cwd(), "dist");
+  app.use(express.static(clientDist, { index: false, maxAge: "1h" }));
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api/") && req.accepts("html")) {
+      return res.sendFile(path.join(clientDist, "index.html"));
+    }
+    return next();
+  });
+}
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("API error:", error instanceof Error ? error.message : "unknown");

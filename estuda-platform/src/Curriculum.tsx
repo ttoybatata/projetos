@@ -1,8 +1,17 @@
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 
 type Topic = { key: string; title: string; objective: string };
 type Subject = { name: string; topics: Topic[] };
-type Attempt = { id: string; activityKey: string; status: string };
+type Attempt = { id: string; activityKey: string; status: string; score?: number | null };
+type QuizQuestion = { id: string; prompt: string; choices: string[] };
+type Quiz = { activityKey: string; questions: QuizQuestion[] };
+type QuizResult = {
+  correctCount: number;
+  total: number;
+  score: number;
+  details: { id: string; correct: boolean; correctIndex: number; explanation: string }[];
+};
 type Props = { grade: string; activities: Attempt[]; onActivityChanged: () => Promise<void> };
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -11,9 +20,14 @@ export default function Curriculum({ grade, activities, onActivityChanged }: Pro
   const [attempts, setAttempts] = useState<Record<string, Attempt>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [busyKey, setBusyKey] = useState("");
+  const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
+  const [activeAttempt, setActiveAttempt] = useState<Attempt | null>(null);
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
+  const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
+  const [guidedTopicKey, setGuidedTopicKey] = useState("");
 
-  // Dashboard is sorted by updatedAt descending, so preserve the latest attempt per topic.
   useEffect(() => {
     const restored: Record<string, Attempt> = {};
     for (const activity of activities) {
@@ -37,29 +51,80 @@ export default function Curriculum({ grade, activities, onActivityChanged }: Pro
     return () => { alive = false; };
   }, [grade]);
 
-  async function start(topic: Topic) {
-    setBusyKey(topic.key); setError("");
+  function clearActive() {
+    setActiveQuiz(null); setActiveAttempt(null); setSelectedAnswers({}); setQuizResult(null); setGuidedTopicKey("");
+  }
+
+  async function openActivity(topic: Topic, attempt?: Attempt) {
+    setBusyKey(topic.key); setError(""); setNotice(""); clearActive();
     try {
-      const response = await fetch(API + "/api/activities/start", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body:JSON.stringify({activityKey:topic.key}) });
+      let currentAttempt = attempt;
+      if (!currentAttempt) {
+        const response = await fetch(API + "/api/activities/start", {
+          method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ activityKey: topic.key })
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "Não foi possível iniciar a atividade.");
+        currentAttempt = body.attempt as Attempt;
+        setAttempts(current => ({ ...current, [topic.key]: currentAttempt! }));
+        await onActivityChanged();
+      }
+      setActiveAttempt(currentAttempt!);
+      const response = await fetch(API + "/api/activities/" + encodeURIComponent(topic.key) + "/quiz", { credentials: "include" });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Não foi possível iniciar a atividade.");
-      setAttempts(current => ({...current,[topic.key]:body.attempt}));
+      if (response.ok) {
+        setActiveQuiz(body as Quiz);
+        setNotice("Responda às questões. A correção e a pontuação são calculadas pelo servidor.");
+      } else if (response.status === 404) {
+        setGuidedTopicKey(topic.key);
+        setNotice("Este tópico ainda não tem questões com correção automática. Estude o objetivo e registre a conclusão guiada quando estiver pronto.");
+      } else {
+        throw new Error(body.error ?? "Não foi possível abrir a atividade.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao abrir atividade.");
+    } finally { setBusyKey(""); }
+  }
+
+  async function completeGuided(topic: Topic) {
+    const attempt = activeAttempt ?? attempts[topic.key];
+    if (!attempt) return;
+    setBusyKey(topic.key); setError(""); setNotice("");
+    try {
+      const response = await fetch(API + "/api/activities/" + encodeURIComponent(attempt.id) + "/complete", {
+        method: "POST", credentials: "include"
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Não foi possível concluir a atividade.");
+      setAttempts(current => ({ ...current, [topic.key]: body.attempt }));
+      setGuidedTopicKey("");
+      setNotice("Conclusão guiada registrada. Esta atividade não recebeu nota automática.");
       await onActivityChanged();
-    } catch(e) { setError(e instanceof Error ? e.message : "Erro ao iniciar atividade."); }
+    } catch (e) { setError(e instanceof Error ? e.message : "Erro ao concluir atividade."); }
     finally { setBusyKey(""); }
   }
 
-  async function complete(topic: Topic) {
-    const attempt = attempts[topic.key];
-    if (!attempt) return;
-    setBusyKey(topic.key); setError("");
+  async function submitQuiz(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeQuiz || !activeAttempt || quizResult || busyKey) return;
+    if (activeQuiz.questions.some(question => selectedAnswers[question.id] === undefined)) {
+      setError("Responda a todas as questões antes de enviar.");
+      return;
+    }
+    setBusyKey(activeQuiz.activityKey); setError(""); setNotice("");
     try {
-      const response = await fetch(API + "/api/activities/" + encodeURIComponent(attempt.id) + "/complete", { method:"POST", credentials:"include" });
+      const response = await fetch(API + "/api/activities/" + encodeURIComponent(activeAttempt.id) + "/submit", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: selectedAnswers })
+      });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Não foi possível concluir a atividade.");
-      setAttempts(current => ({...current,[topic.key]:body.attempt}));
+      if (!response.ok) throw new Error(body.error ?? "Não foi possível corrigir a atividade.");
+      setQuizResult(body.result as QuizResult);
+      setAttempts(current => ({ ...current, [activeQuiz.activityKey]: body.attempt }));
+      setNotice("Respostas corrigidas. Veja o resultado e as explicações abaixo.");
       await onActivityChanged();
-    } catch(e) { setError(e instanceof Error ? e.message : "Erro ao concluir atividade."); }
+    } catch (e) { setError(e instanceof Error ? e.message : "Erro ao enviar respostas."); }
     finally { setBusyKey(""); }
   }
 
@@ -69,17 +134,53 @@ export default function Curriculum({ grade, activities, onActivityChanged }: Pro
     <p className="muted">Tópicos curriculares iniciais para orientar a jornada. A seleção será expandida e revisada por série nas próximas etapas.</p>
     {loading && <p className="muted">Carregando trilhas...</p>}
     {error && <p className="message error" role="alert">{error}</p>}
+    {notice && <p className="message" role="status">{notice}</p>}
     {!loading && subjects.map(subject => <details className="subject-group" key={subject.name} open>
       <summary>{subject.name}<span>{subject.topics.length} tópicos</span></summary>
       <div className="topic-list">{subject.topics.map(topic => {
         const attempt = attempts[topic.key];
         const completed = attempt?.status === "COMPLETED";
         const inProgress = attempt?.status === "IN_PROGRESS";
+        const showing = activeAttempt?.activityKey === topic.key;
         return <article className="topic-item" key={topic.key}>
-          <div><strong>{topic.title}</strong><p>{topic.objective}</p></div>
-          {completed ? <span className="topic-status">Concluída</span> : inProgress ?
-            <button className="small-action" disabled={busyKey===topic.key} onClick={()=>complete(topic)}>{busyKey===topic.key?"Salvando...":"Marcar concluída"}</button> :
-            <button className="small-action" disabled={Boolean(busyKey)} onClick={()=>start(topic)}>{busyKey===topic.key?"Iniciando...":"Começar"}</button>}
+          <div><strong>{topic.title}</strong><p>{topic.objective}</p>
+            {completed && typeof attempt.score === "number" && <p className="topic-score">Resultado do quiz: {attempt.score}%</p>}
+          </div>
+          {completed ? <span className="topic-status">Concluída</span> :
+            <button className="small-action" disabled={Boolean(busyKey)} onClick={() => openActivity(topic, inProgress ? attempt : undefined)}>
+              {busyKey === topic.key ? "Abrindo..." : inProgress ? "Continuar atividade" : "Começar"}
+            </button>}
+          {showing && activeQuiz && !quizResult && <form className="quiz-panel" onSubmit={submitQuiz}>
+            <h3>Hora de praticar</h3>
+            {activeQuiz.questions.map((question, index) => <fieldset className="quiz-question" key={question.id}>
+              <legend>{index + 1}. {question.prompt}</legend>
+              {question.choices.map((choice, choiceIndex) => <label className="quiz-choice" key={choice}>
+                <input type="radio" name={question.id} value={choiceIndex} checked={selectedAnswers[question.id] === choiceIndex}
+                  onChange={() => setSelectedAnswers(current => ({ ...current, [question.id]: choiceIndex }))} />
+                <span>{choice}</span>
+              </label>)}
+            </fieldset>)}
+            <button className="primary-button" disabled={Boolean(busyKey)}>{busyKey ? "Corrigindo..." : "Enviar respostas"}</button>
+          </form>}
+          {showing && quizResult && <div className="quiz-result" role="status">
+            <h3>Você acertou {quizResult.correctCount} de {quizResult.total}</h3>
+            <p className="quiz-score">{quizResult.score}% de aproveitamento</p>
+            {activeQuiz?.questions.map((question, index) => {
+              const detail = quizResult.details.find(item => item.id === question.id);
+              return <div className="quiz-feedback" key={question.id}>
+                <strong>{detail?.correct ? "Resposta correta" : "Revise esta questão"} — Questão {index + 1}</strong>
+                {!detail?.correct && <p>Resposta esperada: {question.choices[detail?.correctIndex ?? 0]}</p>}
+                <p>{detail?.explanation}</p>
+              </div>;
+            })}
+            <button type="button" className="small-action" onClick={clearActive}>Fechar resultado</button>
+          </div>}
+          {showing && guidedTopicKey === topic.key && <div className="guided-panel">
+            <p>Leia o objetivo acima e tente explicar o conceito com suas próprias palavras antes de concluir.</p>
+            <button type="button" className="small-action" disabled={Boolean(busyKey)} onClick={() => completeGuided(topic)}>
+              {busyKey === topic.key ? "Salvando..." : "Registrar conclusão guiada"}
+            </button>
+          </div>}
         </article>;
       })}</div>
     </details>)}
