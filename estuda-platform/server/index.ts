@@ -98,6 +98,11 @@ app.post("/api/activities/:id/submit", requireSession, async (req, res, next) =>
     });
     if (!attempt) return res.status(404).json({ error: "Sessão de atividade não encontrada." });
     if (attempt.status === "COMPLETED") return res.status(409).json({ error: "Esta tentativa já foi enviada." });
+    const user = await prisma.user.findUnique({ where: { id: res.locals.userId }, select: { schoolYear: true } });
+    if (!user?.schoolYear || !schoolYears.includes(user.schoolYear as typeof schoolYears[number]) ||
+        !curriculum[user.schoolYear as typeof schoolYears[number]].some(subject => subject.topics.some(topic => topic.key === attempt.activityKey))) {
+      return res.status(403).json({ error: "Esta atividade não pertence à série atual da sua conta." });
+    }
     const quiz = quizzes[attempt.activityKey];
     if (!quiz) return res.status(404).json({ error: "Esta atividade não possui correção automática." });
     const expectedIds = quiz.questions.map(question => question.id);
