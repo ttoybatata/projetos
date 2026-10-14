@@ -15,3 +15,15 @@
 .diagnostic-recommendations ul{padding-left:1.25rem;margin:.5rem 0;display:grid;gap:.65rem;color:#394760;line-height:1.6}
 .diagnostic-recommendations .muted{font-size:.8rem;margin-bottom:0}
 .diagnostic-card{gap:1.2rem}
+
+textarea{width:100%;resize:vertical;min-height:96px;border:1px solid #dbe1ec;background:#fff;border-radius:10px;padding:.8rem .9rem;color:#26344f;font:inherit;line-height:1.55;outline:none}
+textarea:focus{border-color:#5c7ec0;box-shadow:0 0 0 3px #5c7ec01c}
+.tutor-card{display:grid;gap:1rem}
+.tutor-messages{display:grid;gap:.8rem;max-height:420px;overflow:auto;padding:.9rem;background:#f7f9fd;border:1px solid #e5eaf3;border-radius:12px}
+.tutor-message{max-width:92%;padding:.8rem 1rem;border-radius:12px;line-height:1.6;overflow-wrap:anywhere}
+.tutor-message p{margin:.3rem 0 0;white-space:pre-wrap}
+.tutor-message strong{font-size:.78rem}
+.from-user{justify-self:end;background:#eaf0fb;color:#203c68}
+.from-tutor{justify-self:start;background:#fff;border:1px solid #e4e9f2;color:#34425a}
+.tutor-card .form-stack{max-width:780px}
+@media(max-width:600px){.tutor-message{max-width:100%}.tutor-messages{max-height:360px;padding:.65rem}}
