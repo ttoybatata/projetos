@@ -19,7 +19,7 @@ jobs:
       DATABASE_URL: "file:./ci.db"
       JWT_SECRET: "ci-test-secret-with-more-than-32-characters"
       PORT: "3000"
-      WEB_ORIGIN: "http://127.0.0.1:5174"
+      WEB_ORIGIN: "http://127.0.0.1:5173"
       VITE_API_URL: "http://127.0.0.1:3000"
     steps:
       - uses: actions/checkout@v4
