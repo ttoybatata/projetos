@@ -23,7 +23,7 @@ export default function App() {
   const [busy,setBusy] = useState(false);
   const [recoveryCode,setRecoveryCode] = useState("");
   const [diagnosticAnswers,setDiagnosticAnswers] = useState<Record<string,string>>({});
-  const diagnosticQuestions = getDiagnosticQuestions(user?.schoolYear ?? "6EF", user?.readingFluency ?? "intermediaria");
+  const diagnosticQuestions = getDiagnosticQuestions(user?.schoolYear ?? "6EF", user?.readingFluency ?? "intermediaria", user?.learningGoals ?? []);
   const diagnosticRecommendations = getDiagnosticRecommendations(diagnosticAnswers);
   async function refresh() {
     const me = await request<User>("/api/me");
