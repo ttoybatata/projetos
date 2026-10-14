@@ -9,6 +9,7 @@ import jwt from "jsonwebtoken";
 import { randomBytes, createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
+import { curriculum, schoolYears } from "../shared/curriculum.js";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -46,6 +47,35 @@ const loginSchema = z.object({ displayName: z.string().trim().min(2).max(60), pa
 const diagnosticSchema = z.object({ answers: z.record(z.string(), z.union([z.string().max(500), z.number(), z.boolean()])) });
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", service: "estuda-api" }));
+
+app.get("/api/curriculum", (req, res) => {
+  const parsedGrade = z.enum(schoolYears).safeParse(req.query.grade);
+  if (!parsedGrade.success) return res.status(400).json({ error: "Informe uma série válida entre 6º EF e 3º EM." });
+  return res.json({ grade: parsedGrade.data, subjects: curriculum[parsedGrade.data] });
+});
+
+app.post("/api/activities/start", requireSession, async (req, res, next) => {
+  try {
+    const parsed = z.object({ activityKey: z.string().min(1).max(100) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Atividade inválida." });
+    const user = await prisma.user.findUnique({ where: { id: res.locals.userId }, select: { schoolYear: true } });
+    if (!user?.schoolYear || !schoolYears.includes(user.schoolYear as typeof schoolYears[number])) return res.status(400).json({ error: "Defina sua série antes de iniciar uma atividade." });
+    const topics = curriculum[user.schoolYear as typeof schoolYears[number]].flatMap(subject => subject.topics);
+    if (!topics.some(item => item.key === parsed.data.activityKey)) return res.status(404).json({ error: "Atividade não encontrada para esta trilha." });
+    const attempt = await prisma.activityAttempt.create({ data: { userId: res.locals.userId, activityKey: parsed.data.activityKey, status: "IN_PROGRESS", startedAt: new Date() }, select: { id: true, activityKey: true, status: true, startedAt: true } });
+    return res.status(201).json({ attempt });
+  } catch (error) { return next(error); }
+});
+
+app.post("/api/activities/:id/complete", requireSession, async (req, res, next) => {
+  try {
+    const attempt = await prisma.activityAttempt.findFirst({ where: { id: req.params.id, userId: res.locals.userId } });
+    if (!attempt) return res.status(404).json({ error: "Sessão de atividade não encontrada." });
+    if (attempt.status === "COMPLETED") return res.status(409).json({ error: "Esta atividade já foi concluída." });
+    const completed = await prisma.activityAttempt.update({ where: { id: attempt.id }, data: { status: "COMPLETED", completedAt: new Date() }, select: { id: true, activityKey: true, status: true, startedAt: true, completedAt: true } });
+    return res.json({ attempt: completed });
+  } catch (error) { return next(error); }
+});
 
 app.post("/api/auth/register", async (req, res, next) => {
   try {
@@ -108,12 +138,13 @@ app.put("/api/diagnostic", requireSession, async (req, res, next) => {
 app.get("/api/dashboard", requireSession, async (_req, res, next) => {
   try {
     const userId = res.locals.userId as string;
-    const [activities, completedCount, diagnostic] = await Promise.all([
+    const [activities, allAttempts, completedCount, diagnostic] = await Promise.all([
       prisma.activityAttempt.findMany({ where: { userId }, orderBy: { updatedAt: "desc" }, take: 50, select: { id: true, activityKey: true, status: true, score: true, startedAt: true, completedAt: true } }),
+      prisma.activityAttempt.findMany({ where: { userId }, select: { startedAt: true, completedAt: true } }),
       prisma.activityAttempt.count({ where: { userId, status: "COMPLETED" } }),
       prisma.diagnostic.findUnique({ where: { userId }, select: { completedAt: true } })
     ]);
-    const durationMs = activities.reduce((sum, a) => sum + (a.startedAt && a.completedAt ? Math.max(0, a.completedAt.getTime() - a.startedAt.getTime()) : 0), 0);
+    const durationMs = allAttempts.reduce((sum, a) => sum + (a.startedAt && a.completedAt ? Math.max(0, a.completedAt.getTime() - a.startedAt.getTime()) : 0), 0);
     return res.json({ activities, stats: { completedCount, totalStudyMinutes: Math.floor(durationMs / 60000) }, diagnosticCompletedAt: diagnostic?.completedAt ?? null, hasActivity: activities.length > 0 });
   } catch (error) { return next(error); }
 });
