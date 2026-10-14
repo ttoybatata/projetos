@@ -18,6 +18,13 @@ describe("diagnóstico adaptativo", () => {
     expect(fluent.find(question => question.key === "reading")?.options.map(option => option.value)).toContain("analiso_argumentos");
   });
 
+  it("adiciona perguntas alinhadas aos objetivos escolhidos no cadastro", () => {
+    const questions = getDiagnosticQuestions("3EM", "fluente", ["provas_enem", "recuperar_conteudo"]);
+    expect(questions.map(question => question.key)).toContain("examStrategy");
+    expect(questions.map(question => question.key)).toContain("recovery");
+    expect(questions.map(question => question.key)).not.toContain("routine");
+  });
+
   it("gera sugestões apenas a partir das respostas fornecidas", () => {
     const recommendations = getDiagnosticRecommendations({
       confidence: "aprendo_com_exemplos",
