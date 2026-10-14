@@ -1,6 +1,6 @@
 # Playwright CLI da Microsoft no Estuda
 
-O Playwright CLI oficial (pacote playwright-cli) serve para exploração e controle do navegador por comandos. O pacote @playwright/test é o runner separado para testes E2E repetíveis.
+O CLI oficial é distribuído no pacote @playwright/cli e oferece exploração do navegador por comandos. @playwright/test é um runner separado para testes E2E repetíveis.
 
 ## Preparação
 Com Node.js 22+:
@@ -8,7 +8,7 @@ Com Node.js 22+:
 - npx playwright install chromium
 - npx playwright-cli --help
 
-Consulte a sintaxe da versão instalada e a documentação oficial: https://github.com/microsoft/playwright-cli. Não presuma que exemplos antigos correspondem à versão instalada.
+O nome do pacote npm é @playwright/cli; o binário instalado chama-se playwright-cli. Consulte a ajuda da versão instalada e a documentação oficial: https://github.com/microsoft/playwright-cli.
 
 ## Procedimento
 1. Inicie a aplicação e confirme que a URL local responde.
