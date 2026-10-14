@@ -27,3 +27,14 @@ textarea:focus{border-color:#5c7ec0;box-shadow:0 0 0 3px #5c7ec01c}
 .from-tutor{justify-self:start;background:#fff;border:1px solid #e4e9f2;color:#34425a}
 .tutor-card .form-stack{max-width:780px}
 @media(max-width:600px){.tutor-message{max-width:100%}.tutor-messages{max-height:360px;padding:.65rem}}
+
+.quiz-panel,.quiz-result,.guided-panel{display:grid;gap:1rem;width:100%;margin-top:1rem;padding:1rem;border:1px solid #dfe6f1;border-radius:12px;background:#f8faff}
+.quiz-panel h3,.quiz-result h3{margin:0;font-size:1.05rem}
+.quiz-question{min-width:0;margin:0;padding:.85rem;border:1px solid #e0e6f0;border-radius:10px;background:#fff}
+.quiz-question legend{max-width:100%;padding:0 .2rem;font-weight:650;line-height:1.5}
+.quiz-choice{display:flex;align-items:flex-start;gap:.65rem;padding:.55rem .25rem;line-height:1.5;cursor:pointer}
+.quiz-choice input{margin-top:.3rem;flex:0 0 auto}
+.quiz-score,.topic-score{font-weight:700;color:#245c43}
+.quiz-feedback{padding:.75rem;border-radius:9px;background:#fff;border:1px solid #e3e9f2;line-height:1.55}
+.quiz-feedback p{margin:.4rem 0 0}
+@media(max-width:600px){.quiz-panel,.quiz-result,.guided-panel{padding:.75rem}.quiz-question{padding:.65rem}}
