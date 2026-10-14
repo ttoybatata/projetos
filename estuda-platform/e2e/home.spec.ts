@@ -104,10 +104,10 @@ test("recupera conta com código de uso único e permite editar o perfil", async
   expect(rotatedCode).not.toBe(originalCode);
 
   await page.getByLabel("Nome de usuário", { exact: true }).fill(updatedUsername);
-  await page.getByLabel("Série", { exact: true }).selectOption("7EF");
+  await page.locator('select[name="profileSchoolYear"]').selectOption("7EF");
   await page.getByRole("button", { name: "Salvar configurações" }).click();
   await expect(page.getByText(`Olá, ${updatedUsername}`)).toBeVisible();
-  await expect(page.getByLabel("Série", { exact: true })).toHaveValue("7EF");
+  await expect(page.locator('select[name="profileSchoolYear"]')).toHaveValue("7EF");
 
   await page.getByRole("button", { name: "Sair" }).click();
   await page.getByLabel("Nome de usuário").fill(updatedUsername);
