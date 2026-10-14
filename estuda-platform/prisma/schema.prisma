@@ -31,6 +31,7 @@ model ActivityAttempt {
   activityKey String
   status String @default("PENDING")
   score Float?
+  answers String?
   startedAt DateTime?
   completedAt DateTime?
   createdAt DateTime @default(now())
