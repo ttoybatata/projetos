@@ -10,6 +10,7 @@ import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { curriculum, schoolYears } from "../shared/curriculum.js";
+import { quizzes } from "../shared/activities.js";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -64,6 +65,67 @@ app.get("/api/curriculum", (req, res) => {
   const parsedGrade = z.enum(schoolYears).safeParse(req.query.grade);
   if (!parsedGrade.success) return res.status(400).json({ error: "Informe uma série válida entre 6º EF e 3º EM." });
   return res.json({ grade: parsedGrade.data, subjects: curriculum[parsedGrade.data] });
+});
+
+app.get("/api/activities/:activityKey/quiz", requireSession, async (req, res, next) => {
+  try {
+    const parsedKey = z.string().min(1).max(100).safeParse(req.params.activityKey);
+    if (!parsedKey.success) return res.status(400).json({ error: "Atividade inválida." });
+    const user = await prisma.user.findUnique({ where: { id: res.locals.userId }, select: { schoolYear: true } });
+    if (!user?.schoolYear || !schoolYears.includes(user.schoolYear as typeof schoolYears[number])) {
+      return res.status(400).json({ error: "Defina sua série antes de abrir uma atividade." });
+    }
+    const topics = curriculum[user.schoolYear as typeof schoolYears[number]].flatMap(subject => subject.topics);
+    if (!topics.some(topic => topic.key === parsedKey.data)) return res.status(404).json({ error: "Atividade não encontrada para esta série." });
+    const quiz = quizzes[parsedKey.data];
+    if (!quiz) return res.status(404).json({ error: "Esta atividade ainda não tem questões com correção automática. Você pode estudar o tópico e registrar a conclusão guiada." });
+    return res.json({
+      activityKey: quiz.activityKey,
+      questions: quiz.questions.map(({ id, prompt, choices }) => ({ id, prompt, choices }))
+    });
+  } catch (error) { return next(error); }
+});
+
+app.post("/api/activities/:id/submit", requireSession, async (req, res, next) => {
+  try {
+    const parsedId = z.string().min(1).max(100).safeParse(req.params.id);
+    const parsedBody = z.object({
+      answers: z.record(z.string(), z.number().int().min(0).max(20)).refine(value => Object.keys(value).length <= 20)
+    }).safeParse(req.body);
+    if (!parsedId.success || !parsedBody.success) return res.status(400).json({ error: "Respostas inválidas. Revise as opções e tente novamente." });
+    const attempt = await prisma.activityAttempt.findFirst({
+      where: { id: parsedId.data, userId: res.locals.userId }
+    });
+    if (!attempt) return res.status(404).json({ error: "Sessão de atividade não encontrada." });
+    if (attempt.status === "COMPLETED") return res.status(409).json({ error: "Esta tentativa já foi enviada." });
+    const quiz = quizzes[attempt.activityKey];
+    if (!quiz) return res.status(404).json({ error: "Esta atividade não possui correção automática." });
+    const expectedIds = quiz.questions.map(question => question.id);
+    if (Object.keys(parsedBody.data.answers).length !== expectedIds.length ||
+        expectedIds.some(id => !Object.prototype.hasOwnProperty.call(parsedBody.data.answers, id)) ||
+        quiz.questions.some(question => parsedBody.data.answers[question.id] >= question.choices.length)) {
+      return res.status(400).json({ error: "Responda a todas as questões usando uma das opções disponíveis." });
+    }
+    const details = quiz.questions.map(question => ({
+      id: question.id,
+      correct: parsedBody.data.answers[question.id] === question.correctIndex,
+      correctIndex: question.correctIndex,
+      explanation: question.explanation
+    }));
+    const correctCount = details.filter(item => item.correct).length;
+    const score = Math.round((correctCount / quiz.questions.length) * 100);
+    const completed = await prisma.activityAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        status: "COMPLETED",
+        score,
+        answers: JSON.stringify(parsedBody.data.answers),
+        completedAt: new Date()
+      },
+      select: { id: true, activityKey: true, status: true, score: true, startedAt: true, completedAt: true }
+    });
+    return res.json({ attempt: completed, result: { correctCount, total: quiz.questions.length, score, details } });
+  } catch (error) { return next(error); }
 });
 
 app.post("/api/activities/start", requireSession, async (req, res, next) => {
