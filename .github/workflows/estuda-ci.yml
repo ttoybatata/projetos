@@ -12,11 +12,25 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: estuda
+          POSTGRES_PASSWORD: estuda-ci-password
+          POSTGRES_DB: estuda_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U estuda -d estuda_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: estuda-platform
     env:
-      DATABASE_URL: "file:./ci.db"
+      DATABASE_URL: "postgresql://estuda:estuda-ci-password@localhost:5432/estuda_ci?schema=public"
       JWT_SECRET: "ci-test-secret-with-more-than-32-characters"
       PORT: "3000"
       WEB_ORIGIN: "http://127.0.0.1:5173"
@@ -32,7 +46,7 @@ jobs:
           npm audit --json > /tmp/estuda-npm-audit.json || true
           node -e 'const audit = require("/tmp/estuda-npm-audit.json"); for (const [name, item] of Object.entries(audit.vulnerabilities ?? {})) console.log(JSON.stringify({ name, severity: item.severity, isDirect: item.isDirect, range: item.range, fixAvailable: item.fixAvailable, via: item.via.map(v => typeof v === "string" ? v : { name: v.name, title: v.title, url: v.url, range: v.range }) }));'
       - run: npx prisma generate
-      - run: npx prisma db push --skip-generate
+      - run: npx prisma migrate deploy
       - run: npm run build
       - run: npm test
       - run: npx playwright install --with-deps chromium
