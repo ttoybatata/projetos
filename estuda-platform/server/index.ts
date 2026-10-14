@@ -125,11 +125,11 @@ app.post("/api/auth/recover", async (req, res, next) => {
         passwordHash: await bcrypt.hash(parsed.data.newPassword, 12),
         recoveryCodeHash: createHash("sha256").update(nextRecoveryCode).digest("hex")
       },
-      select: { id: true, displayName: true, schoolYear: true }
+      select: { id: true, displayName: true, schoolYear: true, readingFluency: true, learningGoals: true }
     });
     issueSession(res, updated.id);
     return res.json({
-      user: updated,
+      user: { ...updated, learningGoals: JSON.parse(updated.learningGoals) },
       recoveryCode: nextRecoveryCode,
       notice: "Senha alterada. Guarde o novo código de recuperação: o código anterior deixou de funcionar."
     });
