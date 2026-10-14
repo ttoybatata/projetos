@@ -4,17 +4,17 @@ Fundação inicial em desenvolvimento; ainda não é a plataforma completa de pr
 
 ## Esta etapa inclui
 - Interface responsiva inicial de cadastro/login, painel, diagnóstico inicial e estado vazio.
-- API Express com validação Zod, hash de senha, sessão em cookie HttpOnly, limite de tentativas na autenticação e endpoints de perfil/diagnóstico/painel.
+- API Express com validação Zod, hash de senha, sessão em cookie HttpOnly, limite de tentativas na autenticação, recuperação de conta com código de uso único, edição do perfil e endpoints de diagnóstico/painel.
 - Modelos Prisma para usuários, diagnóstico e tentativas de atividade.
 - Testes unitários iniciais, testes E2E Playwright e workflow de CI.
 - Documentação de exploração com Playwright CLI da Microsoft em docs/PLAYWRIGHT_CLI.md.
 
 ## Limitações conhecidas
-- O código de recuperação é emitido no cadastro e seu hash é guardado, mas a recuperação ainda não foi implementada.
+- A recuperação usa o nome de usuário e o código de uso único; após recuperar, a senha é trocada e um novo código é emitido. O código deve ser guardado pelo aluno e não é enviado por e-mail.
 - O diagnóstico tem uma pergunta inicial; o diagnóstico adaptativo completo por série/habilidade virá em etapa posterior.
-- Currículo completo, aulas/atividades/simulados, redação, tutor IA, edição de perfil e trilhas ainda não estão implementados.
+- O diagnóstico adaptativo completo, exercícios avaliativos interativos, simulados, redação e tutor IA generativo ainda não estão implementados. As trilhas atuais são um ponto de partida editável.
 - SQLite é usado para desenvolvimento local. Antes de produção, configurar PostgreSQL e validar migrações, backups, segurança e privacidade.
-- Nenhum teste é considerado aprovado até ser realmente executado e os logs conferidos.
+- Os testes E2E automatizados cobrem cadastro/login, trilhas, persistência, recuperação de conta e edição de perfil; consulte a execução do GitHub Actions para o resultado do commit revisado. Não declarar aprovação sem conferir os logs.
 
 ## Executar localmente
 Requer Node.js 22+ e npm.

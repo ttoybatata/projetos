@@ -6,7 +6,7 @@ import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { randomBytes, createHash } from "node:crypto";
+import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { curriculum, schoolYears } from "../shared/curriculum.js";
@@ -44,6 +44,17 @@ const registerSchema = z.object({
   learningGoals: z.array(z.enum(["melhorar_estudos", "aprender", "recuperar_conteudo", "provas_enem"])).min(1).max(4)
 });
 const loginSchema = z.object({ displayName: z.string().trim().min(2).max(60), password: z.string().min(1).max(72) });
+const recoverySchema = z.object({
+  displayName: z.string().trim().min(2).max(60),
+  recoveryCode: z.string().trim().min(10).max(64),
+  newPassword: z.string().min(8).max(72)
+});
+const profileSchema = z.object({
+  displayName: z.string().trim().min(2).max(60),
+  schoolYear: z.enum(["6EF", "7EF", "8EF", "9EF", "1EM", "2EM", "3EM"]),
+  readingFluency: z.enum(["preciso_praticar", "intermediaria", "fluente"]),
+  learningGoals: z.array(z.enum(["melhorar_estudos", "aprender", "recuperar_conteudo", "provas_enem"])).min(1).max(4)
+});
 const diagnosticSchema = z.object({ answers: z.record(z.string(), z.union([z.string().max(500), z.number(), z.boolean()])) });
 
 app.get("/api/health", (_req, res) => res.json({ status: "ok", service: "estuda-api" }));
@@ -91,9 +102,37 @@ app.post("/api/auth/register", async (req, res, next) => {
       recoveryCodeHash: createHash("sha256").update(recoveryCode).digest("hex"),
       schoolYear: parsed.data.schoolYear, readingFluency: parsed.data.readingFluency,
       learningGoals: JSON.stringify(parsed.data.learningGoals)
-    }, select: { id: true, displayName: true, schoolYear: true } });
+    }, select: { id: true, displayName: true, schoolYear: true, readingFluency: true, learningGoals: true } });
     issueSession(res, user.id);
-    return res.status(201).json({ user, recoveryCode, notice: "Guarde seu código de recuperação em local seguro. Ele não será exibido novamente." });
+    return res.status(201).json({ user: { ...user, learningGoals: JSON.parse(user.learningGoals) }, recoveryCode, notice: "Guarde seu código de recuperação em local seguro. Ele não será exibido novamente." });
+  } catch (error) { return next(error); }
+});
+
+app.post("/api/auth/recover", async (req, res, next) => {
+  try {
+    const parsed = recoverySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Não foi possível recuperar a conta. Confira os dados e tente novamente." });
+    const user = await prisma.user.findUnique({ where: { displayName: parsed.data.displayName } });
+    const suppliedHash = createHash("sha256").update(parsed.data.recoveryCode.trim().toUpperCase()).digest();
+    const storedHash = user ? Buffer.from(user.recoveryCodeHash, "hex") : Buffer.alloc(32);
+    const matches = storedHash.length === suppliedHash.length && timingSafeEqual(storedHash, suppliedHash);
+    if (!user || !matches) return res.status(400).json({ error: "Não foi possível recuperar a conta. Confira os dados e tente novamente." });
+
+    const nextRecoveryCode = randomBytes(16).toString("hex").toUpperCase();
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(parsed.data.newPassword, 12),
+        recoveryCodeHash: createHash("sha256").update(nextRecoveryCode).digest("hex")
+      },
+      select: { id: true, displayName: true, schoolYear: true, readingFluency: true, learningGoals: true }
+    });
+    issueSession(res, updated.id);
+    return res.json({
+      user: { ...updated, learningGoals: JSON.parse(updated.learningGoals) },
+      recoveryCode: nextRecoveryCode,
+      notice: "Senha alterada. Guarde o novo código de recuperação: o código anterior deixou de funcionar."
+    });
   } catch (error) { return next(error); }
 });
 
@@ -104,7 +143,7 @@ app.post("/api/auth/login", async (req, res, next) => {
     const user = await prisma.user.findUnique({ where: { displayName: parsed.data.displayName } });
     if (!user || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) return res.status(401).json({ error: "Nome ou senha incorretos." });
     issueSession(res, user.id);
-    return res.json({ user: { id: user.id, displayName: user.displayName, schoolYear: user.schoolYear } });
+    return res.json({ user: { id: user.id, displayName: user.displayName, schoolYear: user.schoolYear, readingFluency: user.readingFluency, learningGoals: JSON.parse(user.learningGoals) } });
   } catch (error) { return next(error); }
 });
 
@@ -121,6 +160,30 @@ app.get("/api/me", requireSession, async (_req, res, next) => {
     } });
     if (!user) return res.status(404).json({ error: "Usuário não encontrado." });
     return res.json({ ...user, learningGoals: JSON.parse(user.learningGoals) });
+  } catch (error) { return next(error); }
+});
+
+app.patch("/api/me", requireSession, async (req, res, next) => {
+  try {
+    const parsed = profileSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Confira nome, série, leitura e ao menos um objetivo." });
+    const userId = res.locals.userId as string;
+    const duplicate = await prisma.user.findFirst({
+      where: { displayName: parsed.data.displayName, NOT: { id: userId } },
+      select: { id: true }
+    });
+    if (duplicate) return res.status(409).json({ error: "Este nome já está em uso. Escolha outro." });
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        displayName: parsed.data.displayName,
+        schoolYear: parsed.data.schoolYear,
+        readingFluency: parsed.data.readingFluency,
+        learningGoals: JSON.stringify(parsed.data.learningGoals)
+      },
+      select: { id: true, displayName: true, schoolYear: true, readingFluency: true, learningGoals: true }
+    });
+    return res.json({ user: { ...updated, learningGoals: JSON.parse(updated.learningGoals) } });
   } catch (error) { return next(error); }
 });
 
