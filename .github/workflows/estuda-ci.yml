@@ -76,3 +76,5 @@ jobs:
       - run: npm run test:e2e
         env:
           CI: true
+      - name: Build production Docker image
+        run: docker build --tag estuda:ci .
