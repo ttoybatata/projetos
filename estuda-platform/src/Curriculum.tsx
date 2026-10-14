@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 
 type Topic = { key: string; title: string; objective: string };
 type Subject = { name: string; topics: Topic[] };
@@ -104,7 +105,7 @@ export default function Curriculum({ grade, activities, onActivityChanged }: Pro
     finally { setBusyKey(""); }
   }
 
-  async function submitQuiz(event: React.FormEvent<HTMLFormElement>) {
+  async function submitQuiz(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeQuiz || !activeAttempt || quizResult || busyKey) return;
     if (activeQuiz.questions.some(question => selectedAnswers[question.id] === undefined)) {
