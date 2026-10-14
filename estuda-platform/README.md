@@ -28,5 +28,17 @@ Requer Node.js 22+ e npm.
 6. Execute npm run dev.
 7. Abra http://localhost:5173; API em http://localhost:3000.
 
+## Publicar uma demonstração online no Render
+
+O repositório inclui um Blueprint em `/render.yaml` e um Dockerfile em `estuda-platform/Dockerfile`. O serviço executa o frontend compilado e a API Express na mesma origem, aplica migrações Prisma versionadas ao iniciar e usa PostgreSQL gerenciado.
+
+1. Abra o repositório no Render e selecione **New → Blueprint**.
+2. Conecte o GitHub, selecione este repositório e a branch que contém estes arquivos.
+3. Revise os recursos do Blueprint e confirme a criação do serviço web e do banco.
+4. Aguarde o primeiro deploy e confira o health check em `/api/health`.
+5. Se quiser ativar o Tutor IA, configure `AI_API_URL`, `AI_API_KEY` e `AI_MODEL` nas variáveis secretas do serviço. Sem elas, o tutor informa que está desativado.
+
+O Blueprint usa o plano gratuito para facilitar um teste. A disponibilidade, limites e regras de retenção do plano gratuito podem mudar; não use esse banco para dados reais de alunos sem confirmar retenção, backups, privacidade e condições do provedor. O deploy não acontece apenas por adicionar estes arquivos: é preciso autorizar/conectar o Render e confirmar a criação dos serviços.
+
 ## Fluxo de trabalho
 Cada mudança significativa deve ter Issue, branch e PR para main. O PR deve listar escopo, riscos, comandos realmente executados, resultados e testes não executados. Não fazer merge automaticamente.
