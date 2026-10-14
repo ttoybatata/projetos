@@ -117,14 +117,18 @@ test("recupera conta com código de uso único e permite editar o perfil", async
   await expect(page.locator('select[name="profileSchoolYear"]')).toHaveValue("7EF");
 
   await page.getByRole("button", { name: "Sair" }).click();
+  const rejectedOldCode = await page.request.post("http://127.0.0.1:3000/api/auth/recover", {
+    data: { displayName: updatedUsername, recoveryCode: originalCode, newPassword: secondPassword }
+  });
+  expect(rejectedOldCode.status()).toBe(400);
+  expect(await rejectedOldCode.json()).toMatchObject({
+    error: "Não foi possível recuperar a conta. Confira os dados e tente novamente."
+  });
+
   await page.getByLabel("Nome de usuário").fill(updatedUsername);
-  await page.getByLabel("Código de recuperação").fill(originalCode!);
+  await page.getByLabel("Código de recuperação").fill(rotatedCode!);
   await page.getByLabel("Nova senha", { exact: true }).fill(secondPassword);
   await page.getByLabel("Confirme a nova senha").fill(secondPassword);
-  await page.getByRole("button", { name: "Redefinir senha" }).click();
-  await expect(page.getByRole("alert")).toHaveText("Não foi possível recuperar a conta. Confira os dados e tente novamente.");
-
-  await page.getByLabel("Código de recuperação").fill(rotatedCode!);
   await page.getByRole("button", { name: "Redefinir senha" }).click();
   await expect(page.getByRole("heading", { name: "Seu próximo passo começa aqui." })).toBeVisible();
 
