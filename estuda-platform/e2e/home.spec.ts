@@ -97,7 +97,7 @@ test("recupera conta com código de uso único e permite editar o perfil", async
   await page.getByRole("button", { name: "Esqueci minha senha" }).click();
   await page.getByLabel("Nome de usuário").fill(username);
   await page.getByLabel("Código de recuperação").fill(originalCode!);
-  await page.getByLabel("Nova senha").fill(recoveredPassword);
+  await page.getByLabel("Nova senha", { exact: true }).fill(recoveredPassword);
   await page.getByLabel("Confirme a nova senha").fill(recoveredPassword);
   await page.getByRole("button", { name: "Redefinir senha" }).click();
 
@@ -116,7 +116,7 @@ test("recupera conta com código de uso único e permite editar o perfil", async
   await page.getByRole("button", { name: "Sair" }).click();
   await page.getByLabel("Nome de usuário").fill(updatedUsername);
   await page.getByLabel("Código de recuperação").fill(originalCode!);
-  await page.getByLabel("Nova senha").fill(secondPassword);
+  await page.getByLabel("Nova senha", { exact: true }).fill(secondPassword);
   await page.getByLabel("Confirme a nova senha").fill(secondPassword);
   await page.getByRole("button", { name: "Redefinir senha" }).click();
   await expect(page.getByRole("alert")).toHaveText("Não foi possível recuperar a conta. Confira os dados e tente novamente.");
