@@ -61,6 +61,9 @@ test("cadastra, salva atividades/diagnóstico e restaura tudo após atualizar e 
   await page.getByRole("button", { name: "Salvar diagnóstico" }).click();
   await expect(page.getByText("Diagnóstico", { exact: true })).toBeVisible();
   await expect(page.getByText("Iniciado", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel("Como você se sente ao estudar um assunto novo?")).toHaveValue("aprendo_com_exemplos");
+  await expect(page.getByLabel("Qual formato mais desperta sua curiosidade para aprender algo novo?")).toHaveValue("exemplo_pratico");
 
   await page.getByRole("button", { name: "Sair" }).click();
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
