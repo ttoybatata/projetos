@@ -11,8 +11,8 @@ Fundação inicial em desenvolvimento; ainda não é a plataforma completa de pr
 
 ## Limitações conhecidas
 - A recuperação usa o nome de usuário e o código de uso único; após recuperar, a senha é trocada e um novo código é emitido. O código deve ser guardado pelo aluno e não é enviado por e-mail.
-- O diagnóstico tem uma pergunta inicial; o diagnóstico adaptativo completo por série/habilidade virá em etapa posterior.
-- O diagnóstico adaptativo completo, exercícios avaliativos interativos, simulados, redação e tutor IA generativo ainda não estão implementados. As trilhas atuais são um ponto de partida editável.
+- O diagnóstico inicial usa perguntas por série, fluência de leitura e objetivos, salva respostas e mostra orientações baseadas em regras explícitas. Ainda não atribui notas nem substitui avaliação pedagógica.
+- Exercícios avaliativos interativos, simulados, redação e tutor IA generativo ainda não estão implementados. As trilhas atuais são um ponto de partida editável; as sugestões do diagnóstico são regras transparentes, não respostas geradas por IA.
 - SQLite é usado para desenvolvimento local. Antes de produção, configurar PostgreSQL e validar migrações, backups, segurança e privacidade.
 - Os testes E2E automatizados cobrem cadastro/login, trilhas, persistência, recuperação de conta e edição de perfil; consulte a execução do GitHub Actions para o resultado do commit revisado. Não declarar aprovação sem conferir os logs.
 
