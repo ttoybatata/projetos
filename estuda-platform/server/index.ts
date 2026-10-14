@@ -24,6 +24,7 @@ app.use(cors({ origin: webOrigin, credentials: true }));
 app.use(express.json({ limit: "32kb" }));
 app.use(cookieParser());
 app.use("/api/auth", rateLimit({ windowMs: 900000, limit: 30, standardHeaders: true, legacyHeaders: false }));
+app.use("/api/tutor", rateLimit({ windowMs: 60000, limit: 12, standardHeaders: true, legacyHeaders: false }));
 
 function requireSession(req: express.Request, res: express.Response, next: express.NextFunction) {
   const token = req.cookies?.estuda_session;
@@ -88,6 +89,93 @@ app.post("/api/activities/:id/complete", requireSession, async (req, res, next) 
     const completed = await prisma.activityAttempt.update({ where: { id: attempt.id }, data: { status: "COMPLETED", completedAt: new Date() }, select: { id: true, activityKey: true, status: true, startedAt: true, completedAt: true } });
     return res.json({ attempt: completed });
   } catch (error) { return next(error); }
+});
+
+app.post("/api/tutor/chat", requireSession, async (req, res, next) => {
+  const parsed = z.object({
+    message: z.string().trim().min(1).max(3000),
+    history: z.array(z.object({
+      role: z.enum(["user", "assistant"]),
+      content: z.string().trim().min(1).max(3000)
+    })).max(10).default([])
+  }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Envie uma mensagem de até 3.000 caracteres e um histórico curto." });
+
+  const apiUrl = process.env.AI_API_URL;
+  const apiKey = process.env.AI_API_KEY;
+  const model = process.env.AI_MODEL;
+  if (!apiUrl || !apiKey || !model) {
+    return res.status(503).json({ error: "O tutor IA ainda não está configurado neste ambiente. O administrador precisa configurar AI_API_URL, AI_API_KEY e AI_MODEL." });
+  }
+
+  let target: URL;
+  try {
+    target = new URL(apiUrl);
+  } catch {
+    return res.status(503).json({ error: "A configuração do provedor do tutor IA é inválida." });
+  }
+  if (target.protocol !== "https:" && !["localhost", "127.0.0.1", "::1"].includes(target.hostname)) {
+    return res.status(503).json({ error: "O provedor do tutor IA precisa usar HTTPS." });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: res.locals.userId },
+      select: { schoolYear: true, readingFluency: true, learningGoals: true }
+    });
+    if (!user) return res.status(401).json({ error: "Faça login novamente para usar o tutor." });
+    const gradeLabels: Record<string, string> = {
+      "6EF": "6º ano do Ensino Fundamental", "7EF": "7º ano do Ensino Fundamental",
+      "8EF": "8º ano do Ensino Fundamental", "9EF": "9º ano do Ensino Fundamental",
+      "1EM": "1º ano do Ensino Médio", "2EM": "2º ano do Ensino Médio", "3EM": "3º ano do Ensino Médio"
+    };
+    const goalLabels: Record<string, string> = {
+      melhorar_estudos: "melhorar a qualidade de estudo", aprender: "aprender coisas novas",
+      recuperar_conteudo: "recuperar conteúdo perdido", provas_enem: "preparar-se para provas e ENEM"
+    };
+    const selectedGoals = (JSON.parse(user.learningGoals) as string[]).map(goal => goalLabels[goal] ?? goal);
+    const systemPrompt = [
+      "Você é o tutor pedagógico do Estuda, uma plataforma brasileira para alunos do 6º ano do Ensino Fundamental ao 3º ano do Ensino Médio.",
+      "Responda em português brasileiro, com linguagem acolhedora, clara e adequada à idade.",
+      "Priorize ensinar o raciocínio: comece com uma pista ou pergunta orientadora quando fizer sentido, divida explicações em etapas e verifique se o aluno entendeu.",
+      "Não entregue apenas a resposta final quando o aluno estiver aprendendo; explique conceitos, dê exemplos e convide o aluno a tentar o próximo passo.",
+      "Se a pergunta for sobre uma tarefa escolar, ajude a aprender sem incentivar cola ou apresentar conteúdo não verificado como certeza.",
+      "Não invente notas, histórico de estudo, dados pessoais ou fatos sobre o aluno. Se faltar contexto, pergunte.",
+      "Série do aluno: " + (gradeLabels[user.schoolYear ?? ""] ?? "não informada") + ".",
+      "Fluência de leitura informada pelo aluno: " + (user.readingFluency ?? "não informada") + ".",
+      "Objetivos escolhidos: " + (selectedGoals.length ? selectedGoals.join(", ") : "não informados") + "."
+    ].join("\n");
+
+    const providerResponse = await fetch(target, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiKey },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...parsed.data.history.map(item => ({ role: item.role, content: item.content })),
+          { role: "user", content: parsed.data.message }
+        ],
+        temperature: 0.4,
+        max_tokens: 800
+      }),
+      signal: AbortSignal.timeout(30000)
+    });
+    if (!providerResponse.ok) {
+      return res.status(503).json({ error: "O tutor IA está temporariamente indisponível. Tente novamente mais tarde." });
+    }
+    const providerData = await providerResponse.json() as { choices?: Array<{ message?: { content?: unknown } }> };
+    const reply = providerData.choices?.[0]?.message?.content;
+    if (typeof reply !== "string" || !reply.trim()) {
+      return res.status(502).json({ error: "O provedor do tutor IA retornou uma resposta inválida." });
+    }
+    return res.json({ reply: reply.trim().slice(0, 8000) });
+  } catch (error) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return res.status(503).json({ error: "O tutor IA demorou demais para responder. Tente novamente." });
+    }
+    return res.status(503).json({ error: "Não foi possível conectar ao tutor IA. Tente novamente mais tarde." });
+  }
 });
 
 app.post("/api/auth/register", async (req, res, next) => {
