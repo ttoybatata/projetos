@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { curriculum, schoolYears } from "../shared/curriculum.js";
@@ -15,7 +16,7 @@ import { quizzes } from "../shared/activities.js";
 const app = express();
 const prisma = new PrismaClient();
 const port = Number(process.env.PORT ?? 3000);
-const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+const webOrigin = process.env.WEB_ORIGIN || (process.env.NODE_ENV === "production" ? false : "http://localhost:5173");
 if (process.env.NODE_ENV === "production" && (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32)) {
   throw new Error("JWT_SECRET precisa ter pelo menos 32 caracteres em produção.");
 }
@@ -379,6 +380,17 @@ app.get("/api/dashboard", requireSession, async (_req, res, next) => {
     return res.json({ activities, stats: { completedCount, totalStudyMinutes: Math.floor(durationMs / 60000) }, diagnosticCompletedAt: diagnostic?.completedAt ?? null, hasActivity: activities.length > 0 });
   } catch (error) { return next(error); }
 });
+
+if (process.env.NODE_ENV === "production") {
+  const clientDist = path.resolve(process.cwd(), "dist");
+  app.use(express.static(clientDist, { index: false, maxAge: "1h" }));
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api/") && req.accepts("html")) {
+      return res.sendFile(path.join(clientDist, "index.html"));
+    }
+    return next();
+  });
+}
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("API error:", error instanceof Error ? error.message : "unknown");
