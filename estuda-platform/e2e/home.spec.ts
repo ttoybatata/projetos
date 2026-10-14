@@ -198,6 +198,7 @@ test("não disponibiliza quiz de outra série", async ({ page }) => {
   await page.getByRole("checkbox", { name: "Aprender coisas novas" }).check();
   await page.getByLabel("Confirme sua senha").fill(password);
   await page.getByRole("button", { name: "Criar minha conta" }).click();
+  await expect(page.getByRole("heading", { name: "Seu próximo passo começa aqui." })).toBeVisible();
 
   const status = await page.evaluate(async () => {
     const response = await fetch("http://127.0.0.1:3000/api/activities/matematica-naturais/quiz", { credentials: "include" });
