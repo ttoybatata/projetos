@@ -15,7 +15,7 @@ Fundação inicial em desenvolvimento; ainda não é a plataforma completa de pr
 - A interface e o endpoint do tutor IA estão implementados para provedores compatíveis com a API de chat, mas o tutor só responde quando `AI_API_URL`, `AI_API_KEY` e `AI_MODEL` são configurados como segredos/variáveis no ambiente do servidor. Sem isso, a aplicação informa que o serviço não está configurado; ela não simula respostas de IA.
 - Há quizzes objetivos com correção no servidor para sete atividades iniciais de Matemática (uma por série, do 6º EF ao 3º EM), com três questões por quiz, explicações e pontuação persistida. Os demais tópicos ainda oferecem conclusão guiada sem nota automática. Simulados completos e redação continuam pendentes.
 - As trilhas são um ponto de partida editável, não um currículo oficial homologado; as sugestões do diagnóstico são regras transparentes, não respostas geradas por IA.
-- SQLite é usado para desenvolvimento local. Antes de produção, configurar PostgreSQL e validar migrações, backups, segurança e privacidade.
+- PostgreSQL é o banco configurado no schema e no CI. A migração inicial está versionada em `prisma/migrations/`; antes de produção ainda é necessário configurar um banco gerenciado, TLS/SSL, backups, restauração testada, monitoramento e segredos do ambiente.
 - Os testes E2E automatizados cobrem cadastro/login, trilhas, persistência, recuperação de conta e edição de perfil; consulte a execução do GitHub Actions para o resultado do commit revisado. Não declarar aprovação sem conferir os logs.
 
 ## Executar localmente
