@@ -3,7 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
-  // SQLite used to contend in CI; keep browser tests deterministic with one worker.
+  // Serialize CI browser tests to reduce intermittent failures and simplify diagnosis.
   workers: process.env.CI ? 1 : undefined,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
