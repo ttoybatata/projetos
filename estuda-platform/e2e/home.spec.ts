@@ -43,11 +43,13 @@ test("cadastra, salva atividades/diagnóstico e restaura tudo após atualizar e 
   await expect(page.getByText("Compreensão de textos", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Começar" }).first().click();
-  await expect(page.getByRole("button", { name: "Marcar concluída" }).first()).toBeVisible();
+  await expect(page.getByText(/ainda não tem questões com correção automática/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Registrar conclusão guiada" }).first()).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "Marcar concluída" }).first()).toBeVisible();
-  await page.getByRole("button", { name: "Marcar concluída" }).first().click();
+  await page.getByRole("button", { name: "Continuar atividade" }).first().click();
+  await expect(page.getByRole("button", { name: "Registrar conclusão guiada" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Registrar conclusão guiada" }).first().click();
   await expect(page.getByText("Concluída", { exact: true }).first()).toBeVisible();
 
   await page.reload();
@@ -158,4 +160,45 @@ test("informa quando o provedor do tutor IA não está configurado", async ({ pa
   await page.getByRole("button", { name: "Enviar pergunta" }).click();
   await expect(page.getByRole("alert")).toHaveText(/tutor IA ainda não está configurado/i);
   await expect(page.getByText("Tutor Estuda", { exact: true })).toHaveCount(0);
+});
+
+
+test("corrige quiz de matemática no servidor e persiste a pontuação real", async ({ page }) => {
+  const username = uniqueUser();
+  const password = "TesteEstuda@2026";
+  await page.goto("/");
+  await page.getByLabel("Nome de usuário").fill(username);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
+  await page.getByLabel("Em qual série você está?").selectOption("6EF");
+  await page.getByRole("checkbox", { name: "Aprender coisas novas" }).check();
+  await page.getByLabel("Confirme sua senha").fill(password);
+  await page.getByRole("button", { name: "Criar minha conta" }).click();
+
+  const topic = page.locator(".topic-item").filter({ hasText: "Números naturais e operações" });
+  await topic.getByRole("button", { name: "Começar" }).click();
+  await expect(topic.getByRole("heading", { name: "Hora de praticar" })).toBeVisible();
+  await topic.getByLabel("175").check();
+  await topic.getByLabel("9").check();
+  await topic.getByLabel("6 × 7").check();
+  await topic.getByRole("button", { name: "Enviar respostas" }).click();
+
+  await expect(topic.getByRole("heading", { name: "Você acertou 3 de 3" })).toBeVisible();
+  await expect(topic.getByText("100% de aproveitamento")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Resultado do quiz: 100%", { exact: true })).toBeVisible();
+});
+
+test("não disponibiliza quiz de outra série", async ({ page }) => {
+  const username = uniqueUser();
+  const password = "TesteEstuda@2026";
+  await page.goto("/");
+  await page.getByLabel("Nome de usuário").fill(username);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
+  await page.getByLabel("Em qual série você está?").selectOption("7EF");
+  await page.getByRole("checkbox", { name: "Aprender coisas novas" }).check();
+  await page.getByLabel("Confirme sua senha").fill(password);
+  await page.getByRole("button", { name: "Criar minha conta" }).click();
+
+  const response = await page.request.get("http://127.0.0.1:3000/api/activities/matematica-naturais/quiz");
+  expect(response.status()).toBe(404);
 });
