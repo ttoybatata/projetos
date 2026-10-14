@@ -57,6 +57,7 @@ test("cadastra, salva atividades/diagnóstico e restaura tudo após atualizar e 
   await page.getByLabel("Ao ler um texto, qual situação combina mais com você?").selectOption("identifico_ideia_principal");
   await page.getByLabel("Em matemática, qual tema você quer praticar primeiro?").selectOption("calculos_basicos");
   await page.getByLabel("Quando uma atividade fica difícil, o que você costuma fazer?").selectOption("tento_de_novo");
+  await page.getByLabel("Qual formato mais desperta sua curiosidade para aprender algo novo?").selectOption("exemplo_pratico");
   await page.getByRole("button", { name: "Salvar diagnóstico" }).click();
   await expect(page.getByText("Diagnóstico", { exact: true })).toBeVisible();
   await expect(page.getByText("Iniciado", { exact: true })).toBeVisible();
