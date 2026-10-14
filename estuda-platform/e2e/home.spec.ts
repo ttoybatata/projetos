@@ -135,3 +135,21 @@ test("recupera conta com código de uso único e permite editar o perfil", async
   await page.getByRole("button", { name: "Entrar no Estuda" }).click();
   await expect(page.getByRole("heading", { name: "Seu próximo passo começa aqui." })).toBeVisible();
 });
+
+
+test("informa quando o provedor do tutor IA não está configurado", async ({ page }) => {
+  const username = uniqueUser();
+  const password = "TesteEstuda@2026";
+  await page.goto("/");
+  await page.getByLabel("Nome de usuário").fill(username);
+  await page.getByLabel("Senha", { exact: true }).fill(password);
+  await page.getByLabel("Em qual série você está?").selectOption("1EM");
+  await page.getByRole("checkbox", { name: "Preparar-me para provas e ENEM" }).check();
+  await page.getByLabel("Confirme sua senha").fill(password);
+  await page.getByRole("button", { name: "Criar minha conta" }).click();
+
+  await page.getByLabel("Pergunte ao tutor").fill("Pode me ajudar a entender funções?");
+  await page.getByRole("button", { name: "Enviar pergunta" }).click();
+  await expect(page.getByRole("alert")).toHaveText(/tutor IA ainda não está configurado/i);
+  await expect(page.getByText("Tutor Estuda", { exact: true })).toHaveCount(0);
+});
