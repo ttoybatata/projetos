@@ -3,15 +3,24 @@ import { useEffect, useState } from "react";
 type Topic = { key: string; title: string; objective: string };
 type Subject = { name: string; topics: Topic[] };
 type Attempt = { id: string; activityKey: string; status: string };
-type Props = { grade: string; onActivityChanged: () => Promise<void> };
+type Props = { grade: string; activities: Attempt[]; onActivityChanged: () => Promise<void> };
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
-export default function Curriculum({ grade, onActivityChanged }: Props) {
+export default function Curriculum({ grade, activities, onActivityChanged }: Props) {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [attempts, setAttempts] = useState<Record<string, Attempt>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyKey, setBusyKey] = useState("");
+
+  // Dashboard is sorted by updatedAt descending, so preserve the latest attempt per topic.
+  useEffect(() => {
+    const restored: Record<string, Attempt> = {};
+    for (const activity of activities) {
+      if (!restored[activity.activityKey]) restored[activity.activityKey] = activity;
+    }
+    setAttempts(restored);
+  }, [activities]);
 
   useEffect(() => {
     let alive = true;
@@ -68,7 +77,7 @@ export default function Curriculum({ grade, onActivityChanged }: Props) {
         const inProgress = attempt?.status === "IN_PROGRESS";
         return <article className="topic-item" key={topic.key}>
           <div><strong>{topic.title}</strong><p>{topic.objective}</p></div>
-          {completed ? <span className="topic-status">Concluída nesta sessão</span> : inProgress ?
+          {completed ? <span className="topic-status">Concluída</span> : inProgress ?
             <button className="small-action" disabled={busyKey===topic.key} onClick={()=>complete(topic)}>{busyKey===topic.key?"Salvando...":"Marcar concluída"}</button> :
             <button className="small-action" disabled={Boolean(busyKey)} onClick={()=>start(topic)}>{busyKey===topic.key?"Iniciando...":"Começar"}</button>}
         </article>;
